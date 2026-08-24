@@ -587,12 +587,11 @@ function openAddCodeModal() {
     
     // Set default start date to now
     const now = new Date();
-    const startDate = now.toISOString().slice(0, 16);
-    form.querySelector('input[name="start_date"]').value = startDate;
-    
+    form.querySelector('input[name="start_date"]').value = toLocalDatetimeInputValue(now);
+
     // Set default end date to 30 days from now
     const endDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-    form.querySelector('input[name="end_date"]').value = endDate.toISOString().slice(0, 16);
+    form.querySelector('input[name="end_date"]').value = toLocalDatetimeInputValue(endDate);
     
     // Store initial state
     storeModalState('addCodeModal', form);
@@ -788,8 +787,25 @@ function formatTime(dateString) {
 
 function formatDateTimeForInput(dateString) {
     if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toISOString().slice(0, 16);
+    // BUG da fix: chuoi start_date/end_date tu backend la naive datetime
+    // (khong co timezone, vd "2026-07-30T15:00:00") — day CHINH LA gio dia
+    // phuong da luu, dung nguyen nhu luc nguoi dung chon. Truoc day di qua
+    // new Date(dateString).toISOString() se bi trinh duyet HIEU NHAM chuoi
+    // nay la gio dia phuong ROI TU DOI SANG UTC, lam lech gio hien thi dung
+    // bang so gio lech mui gio (vd UTC+7 se hien sai 7 tieng) — dung la loi
+    // "chon giờ xong lưu lại thì bị sai" nguoi dung bao cao. Fix: chuan hoa
+    // dau cach ngay/gio ve 'T' roi cat thang chuoi, KHONG di qua Date object.
+    return dateString.replace(' ', 'T').slice(0, 16);
+}
+
+// Format 1 Date object (client-side "now") thanh chuoi "YYYY-MM-DDTHH:mm"
+// theo GIO DIA PHUONG cua trinh duyet — dung cho input datetime-local. Khac
+// voi toISOString() (luon tra ve UTC), ham nay dung cac getter local
+// (getFullYear/getMonth/...) nen gia tri hien ra dung bang gio hien tai
+// nguoi dung dang thay, khong bi lech theo mui gio.
+function toLocalDatetimeInputValue(date) {
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function debounce(func, wait) {
