@@ -1988,6 +1988,13 @@ async function proceedWithPayment() {
             trang_thai: 'Đã thanh toán',
             hinh_thuc_tt: paymentMethod, // Add payment method
             idempotency_key: paymentIdempotencyKey,
+            // Gui ID cac ma giam gia dang chon de SERVER tu kiem tra lai hieu
+            // luc (het han/chua toi ngay/het luot...) va tu tinh so tien giam —
+            // truoc day chi tinh o client roi gui thang tong_tien da giam, nen
+            // ma da het han (hoac het han GIUA luc mo gio hang va luc bam thanh
+            // toan) van duoc ap dung binh thuong vi server chua tung biet co
+            // ma giam gia nao duoc dung. Xem invoices.py create_invoice().
+            discount_code_ids: selectedDiscounts.map(d => d.id),
             items: cart.map(item => ({
                 product_id: item.id,
                 product_code: item.code || '',
@@ -2026,7 +2033,13 @@ async function proceedWithPayment() {
             let errorMessage = 'Thanh toán thất bại';
             try {
                 const errorJson = JSON.parse(errorText);
-                errorMessage = errorJson.detail || errorMessage;
+                // BUG da fix: exception handler cua backend (main.py) tra loi ra
+                // dang {"error": "..."} chu KHONG PHAI {"detail": "..."} nhu
+                // FastAPI mac dinh — truoc day chi doc errorJson.detail nen luon
+                // roi vao thong bao chung chung "Thanh toán thất bại", khong bao
+                // gio thay ly do that (vd "Mã ... đã hết hạn", "chỉ còn X cái
+                // không đủ để bán"...), du server da tra ve dung ly do.
+                errorMessage = errorJson.error || errorJson.detail || errorMessage;
             } catch (e) {
                 errorMessage = errorText || errorMessage;
             }
