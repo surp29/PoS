@@ -2840,3 +2840,30 @@ html.anim-shown .content-header,
 html.anim-shown .content-body {
   opacity: 1;
 }
+
+/* ========================================
+   Fix cho .stat-content: so KPI tran ra ngoai card khi thu nho giao dien
+   .stat-content duoc dinh nghia LAP LAI ~10 lan (4 lan trong file nay + rai
+   rac trong <style> rieng cua orders.html/products.html/employees.html/...)
+   deu chi co "flex:1" ma khong co min-width:0. Flex item mac dinh
+   min-width:auto = khong bao gio tu thu nho hon kich thuoc NOI DUNG cua no
+   (day la hanh vi CSS Flexbox chuan, khong phai loi trinh duyet) — voi
+   .stat-number ben trong dat white-space:nowrap (JS gsap_ui.js tu dong them
+   de tranh so bi vo dong, xem fitStatNumber()), noi dung do la CA CHUOI SO
+   tren 1 dong, nen .stat-content khong bao gio chiu hep hon do rong so do,
+   tran ra ngoai .stat-card khi card bi grid/thu nho giao dien ep hep lai —
+   JS co giam font-size cach may cung khong giai quyet duoc vi no do dua tren
+   container.clientWidth, ma clientWidth cua chinh .stat-content lai bi hanh
+   vi flex nay lam PHONG TO qua kich thuoc thuc su duoc cap (xac nhan bang
+   Selenium: resize cua so nho lai, .stat-content van bao clientWidth du cho
+   chuoi so, trong khi .stat-card cha no da hep hon nhieu).
+   reports.html tinh co da tu fix rieng (co san min-width:0) nhung khong lan
+   sang cac trang khac — dat 1 rule dung chung o day, !important de chac
+   chan thang moi ban khai bao trung lap (kho ra nhung tranh lap lai dung
+   sai nay them lan nua o trang moi trong tuong lai). Day la thuoc tinh cau
+   truc thuan tuy (cho phep co giãn dung), khong co ly do hop ly nao can
+   .stat-content GIU nguyen hanh vi cu.
+   ======================================== */
+.stat-content {
+  min-width: 0 !important;
+}

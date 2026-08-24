@@ -237,4 +237,35 @@
     });
   });
   statObserver.observe(document.body, { childList: true, subtree: true });
+
+  // ── 6) Fit lại .stat-number khi khoảng trống hiển thị đổi kích thước ─────
+  // fitStatNumber() ở trên chỉ chạy 1 LẦN lúc gán giá trị — không tự chạy lại
+  // khi không gian hiển thị hẹp đi SAU ĐÓ, khiến số bị TRÀN RA NGOÀI card nếu
+  // thu nhỏ giao diện lại sau khi đã fit vừa ở lúc rộng hơn (báo cáo thực tế:
+  // HTML còn lại white-space:nowrap từ lần fit trước nhưng font-size không co
+  // theo, số tràn ra ngoài). Dùng ResizeObserver thay vì lắng nghe 'resize' của
+  // window — khoảng trống hiển thị có thể đổi kích thước dù cửa sổ KHÔNG đổi
+  // (vd bấm thu gọn sidebar chỉ đổi margin-left qua CSS transition, không bao
+  // giờ bắn 'resize'); ResizeObserver bắt đúng mọi trường hợp co giãn layout.
+  if ('ResizeObserver' in window) {
+    var statResizeObserver = new ResizeObserver(function (entries) {
+      entries.forEach(function (entry) {
+        var el = entry.target.querySelector('.stat-number');
+        if (el) fitStatNumber(el);
+      });
+    });
+    document.querySelectorAll('.stat-content').forEach(function (container) {
+      statResizeObserver.observe(container);
+    });
+  } else {
+    // Trình duyệt cũ không có ResizeObserver — fallback nghe window resize
+    // (debounce nhẹ, tránh chạy dồn dập lúc kéo thả cửa sổ).
+    var resizeTimer = null;
+    window.addEventListener('resize', function () {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(function () {
+        document.querySelectorAll('.stat-number').forEach(fitStatNumber);
+      }, 150);
+    });
+  }
 })();
