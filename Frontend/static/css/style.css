@@ -2867,3 +2867,40 @@ html.anim-shown .content-body {
 .stat-content {
   min-width: 0 !important;
 }
+
+/* ========================================
+   Fix tiep theo cho KPI: so van vo thanh tung manh 1-2 ky tu ("781" / ",91" /
+   "2,5" / "54" / "VN" / "Đ") khi card bi ep RAT hep (vd phong to giao dien —
+   zoom lam trinh duyet can nhieu khong gian man hinh hon cho cung layout,
+   card bi day ve gan sat muc toi thieu minmax(150px,...) cua .stats-grid).
+   Do la vi fitStatNumber() (gsap_ui.js) chi co the giam FONT-SIZE (san
+   dung — 13px), no khong dong den phan cung .stat-card chiem: padding
+   24px×2 (--spacing-6) + icon 60px + margin-right 16px = 124px CO DINH,
+   khong co giãn theo card. Voi card 150px (muc toi thieu cua grid), phan
+   con lai cho SO chi con ~150-48-76 = 26px — KHONG font-size nao lam 16
+   ky tu "781,912,554 VNĐ" vua duoc trong 26px, nen roi vao fallback vo
+   dong tung 1-2 ky tu (xac nhan bang do dac thuc te qua Selenium — dung
+   dung con so 25px nay).
+   Fix: container query tren .stat-card — khi CHINH CARD (khong phai
+   viewport) hep lai, thu nho icon + padding de tra lai khong gian cho so,
+   thay vi giu nguyen kich thuoc co dinh cua icon/padding bat ke card con
+   bao nhieu cho. Container query (khac media query) phan ung dung theo do
+   rong CUA CARD, dung cho grid nhieu cot co the co nhieu do rong khac nhau
+   tuy so luong card/kich thuoc man hinh. */
+.stat-card {
+  container-type: inline-size;
+}
+@container (max-width: 210px) {
+  .stat-card {
+    padding: 14px !important;
+  }
+  .stat-icon {
+    width: 38px !important;
+    height: 38px !important;
+    margin-right: 10px !important;
+    flex-shrink: 0;
+  }
+  .stat-icon i {
+    font-size: 0.85rem !important;
+  }
+}
