@@ -181,6 +181,19 @@ def create_invoice(payload: InvoiceCreate, db: Session = Depends(get_db),
                 return {"success": True, "id": existing.id, "duplicate": True}
         log_error("CREATE_INVOICE", f"Lỗi ràng buộc dữ liệu khi tạo hóa đơn {payload.so_hd}", error=e)
         raise HTTPException(status_code=409, detail="Hóa đơn hoặc giao dịch này vừa được xử lý, vui lòng kiểm tra lại danh sách hóa đơn.")
+    except HTTPException:
+        # BUG da fix: thieu nhanh nay khien MOI HTTPException tu raise ben trong
+        # try (vd 409 "khong du hang" o buoc kiem ton kho, va 400 "ma giam gia
+        # het han" moi them) bi chinh except Exception ben duoi "nuot" mat — vi
+        # HTTPException CUNG LA 1 Exception, khong co nhanh rieng thi no roi
+        # thang xuong except Exception, bi boc lai thanh 500 chung chung voi
+        # message bi long thong tin sai (da xac nhan bang thuc nghiem: goi
+        # invoice vuot ton kho, ky vong 409 nhung nhan ve 500 kem message
+        # "Lỗi tạo hóa đơn: 409: Sản phẩm ... " — sai ca status code lan noi
+        # dung message). Chi can re-raise nguyen ven o day la du, KHONG duoc de
+        # loi xuong except Exception phia duoi.
+        db.rollback()
+        raise
     except Exception as e:
         log_error("CREATE_INVOICE", f"Lỗi khi tạo hóa đơn {payload.so_hd}", error=e)
         db.rollback()
