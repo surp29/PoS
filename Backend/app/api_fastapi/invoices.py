@@ -4,10 +4,11 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from ..permission_middleware import require_permission
 from ..database import get_db
-from ..models import User, Invoice, InvoiceItem, Product, Warehouse
+from ..models import User, Invoice, InvoiceItem, Product, Warehouse, DiscountCode
 from ..schemas_fastapi import InvoiceOut, InvoiceCreate, InvoiceUpdate, InvoiceItemOut
 from ..logger import log_info, log_success, log_error, log_warning
 from ..services.invoices import update_debt_for_customer
+from ..services.discounts import can_use_discount, compute_discount_amount
 from ..services.general_diary import create_general_diary_entry
 from ..services.auth_helper import get_username_from_request
 from ..services.integration_events import emit_event, product_snapshot
@@ -60,6 +61,40 @@ def create_invoice(payload: InvoiceCreate, db: Session = Depends(get_db),
             return {"success": True, "id": existing.id, "duplicate": True}
 
     try:
+        # Kiểm tra lại mã giảm giá NGAY TẠI SERVER (không tin số tiền client tính) —
+        # trước đây trang POS tự lọc/tính giảm giá HOÀN TOÀN ở client (dựa vào
+        # discountCodes tải 1 lần lúc load trang + đồng hồ trình duyệt), rồi gửi
+        # thẳng tong_tien ĐÃ GIẢM lên đây; endpoint này chưa từng biết/kiểm tra có
+        # mã giảm giá nào được dùng — mã đã HẾT HẠN (hoặc chưa tới ngày, đã hết
+        # lượt...) vẫn được áp dụng bình thường nếu client cứ gửi tong_tien đã
+        # giảm (xác nhận bằng thực nghiệm: gọi thẳng POST /api/invoices/ với 1 mã
+        # đã hết hạn không hề bị chặn). .with_for_update() khoá các dòng
+        # DiscountCode ngay từ lúc kiểm tra — cùng mẫu chống race đã dùng cho
+        # Product/Warehouse — tránh 2 hoá đơn cùng lúc đều "qua" kiểm tra
+        # max_uses trước khi bên nào kịp tăng used_count.
+        discount_amount_total = 0.0
+        discount_amounts_by_id: dict[int, float] = {}
+        locked_discount_codes: list[DiscountCode] = []
+        if payload.discount_code_ids and payload.items:
+            items_subtotal = sum(item.total_price for item in payload.items)
+            locked_discount_codes = (
+                db.query(DiscountCode)
+                .filter(DiscountCode.id.in_(payload.discount_code_ids))
+                .with_for_update()
+                .all()
+            )
+            found_ids = {c.id for c in locked_discount_codes}
+            missing_ids = set(payload.discount_code_ids) - found_ids
+            if missing_ids:
+                raise HTTPException(status_code=400, detail=f"Mã giảm giá không tồn tại: {sorted(missing_ids)}")
+            for code in locked_discount_codes:
+                err = can_use_discount(code, items_subtotal)
+                if err:
+                    raise HTTPException(status_code=400, detail=f"Mã '{code.code}': {err}")
+                amount = compute_discount_amount(code, items_subtotal)
+                discount_amounts_by_id[code.id] = amount
+                discount_amount_total += amount
+
         # Tạo hóa đơn mới
         inv = Invoice(
             so_hd=payload.so_hd,
@@ -67,7 +102,14 @@ def create_invoice(payload: InvoiceCreate, db: Session = Depends(get_db),
             nguoi_mua=payload.nguoi_mua,
             customer_id=payload.customer_id,
             idempotency_key=payload.idempotency_key,
-            tong_tien=payload.tong_tien,
+            # Có mã giảm giá hợp lệ kèm items -> LUÔN dùng số tiền server tự tính
+            # (subtotal từ items trừ giảm giá đã kiểm tra ở trên), không dùng
+            # tong_tien client gửi — đóng hoàn toàn đường vòng "tự sửa tong_tien
+            # trong request để áp giảm giá tuỳ ý / mã đã hết hạn".
+            tong_tien=(
+                max(0.0, items_subtotal - discount_amount_total)
+                if (payload.discount_code_ids and payload.items) else payload.tong_tien
+            ),
             trang_thai=payload.trang_thai,
             hinh_thuc_tt=payload.hinh_thuc_tt,
         )
@@ -129,7 +171,15 @@ def create_invoice(payload: InvoiceCreate, db: Session = Depends(get_db),
                     warehouse.so_luong = new_wh_qty
                     warehouse.trang_thai = 'Còn hàng' if new_wh_qty > 0 else 'Hết hàng'
                     log_info("UPDATE_WAREHOUSE_STOCK", f"Đã cập nhật số lượng kho {warehouse.ma_kho} - SP {item_data.product_code}: {current_wh_qty} -> {new_wh_qty}")
-        
+
+        # Tăng used_count/total_savings CÙNG transaction với việc tạo hoá đơn —
+        # nếu đặt ở endpoint /discount-codes/{id}/use riêng (như code cũ) thì
+        # POS phải gọi thêm 1 request nữa mới ghi nhận được, dễ bị bỏ qua/lệch
+        # nếu request đó thất bại độc lập với hoá đơn.
+        for code in locked_discount_codes:
+            code.used_count = (code.used_count or 0) + 1
+            code.total_savings = (code.total_savings or 0.0) + discount_amounts_by_id.get(code.id, 0.0)
+
         db.commit()
         db.refresh(inv)
         

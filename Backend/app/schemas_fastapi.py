@@ -357,6 +357,11 @@ class InvoiceCreate(BaseModel):
     trang_thai: Optional[str] = 'Đã thanh toán'
     hinh_thuc_tt: Optional[str] = None
     items: Optional[list[InvoiceItemCreate]] = []  # List of invoice items
+    # ID các mã giảm giá client claim đã áp dụng (POS gửi lên) — server SẼ TỰ
+    # kiểm tra lại hiệu lực (hết hạn/chưa tới ngày/đủ lượt/đủ đơn tối thiểu) và
+    # tự tính lại số tiền giảm, KHÔNG tin tong_tien client gửi khi trường này có
+    # giá trị. Xem services/discounts.py + api_fastapi/invoices.py create_invoice.
+    discount_code_ids: Optional[list[int]] = None
 
 
 class InvoiceUpdate(BaseModel):
